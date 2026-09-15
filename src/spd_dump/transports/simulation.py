@@ -213,6 +213,9 @@ class MockUnisocDevice:
         table = bytearray()
         divisor = 10
         for name, size in self.DEFAULT_PARTITIONS:
+            if name == "splloader":
+                # splloader is physical boot0/boot1 block, not in GPT partition table
+                continue
             entry = bytearray(0x4C)
             # Encode name in UTF-16LE (up to 36 chars = 72 bytes)
             name_utf16 = name.encode("utf-16le")[:72]
