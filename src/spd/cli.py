@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import datetime
 import sys
 from pathlib import Path
 
 import click
 
 from .boot.engine import BootEngine, parse_address_from_filename
-from .core.channel import SpdChannel
+from .core.channel import BslError, BslTimeoutError, SpdChannel
 from .core.const import DEFAULT_BAUDRATE, DEFAULT_BLK_SIZE, BslStage
 from .flasher.operations import (
+    FlasherError,
     dump_all,
     dump_partition,
     erase_all,
@@ -18,10 +20,12 @@ from .flasher.operations import (
     flash_all,
     flash_partition,
     read_chip_info,
+    read_pactime,
     read_partition_table,
     reboot_device,
     set_active_slot,
     set_dm_verity,
+    set_first_mode,
     write_offset,
     write_value,
 )
@@ -287,8 +291,45 @@ def cmd_info(obj: ContextObject) -> None:
     """Query chip UID, chip type, and hardware status."""
     trans, channel = obj.get_channel(auto_boot=True)
     info = read_chip_info(channel)
+    try:
+        raw_pt, unix_pt = read_pactime(channel)
+        if unix_pt:
+            dt = datetime.datetime.fromtimestamp(unix_pt, tz=datetime.UTC)
+            info["PAC Build Time"] = (
+                f"{dt.strftime('%Y-%m-%d %H:%M:%S UTC')} (raw: 0x{raw_pt:X})"
+            )
+    except (BslError, BslTimeoutError, FlasherError, OSError):
+        pass
     render_device_info(info)
     trans.disconnect()
+
+
+@cli.command("pactime")
+@click.pass_obj
+def cmd_pactime(obj: ContextObject) -> None:
+    """Read PAC build timestamp from miscdata partition."""
+    trans, channel = obj.get_channel(auto_boot=True)
+    try:
+        raw_pt, unix_pt = read_pactime(channel)
+        dt = datetime.datetime.fromtimestamp(unix_pt, tz=datetime.UTC)
+        console.print(
+            f"[bold cyan]PAC Timestamp:[/bold cyan] {dt.strftime('%Y-%m-%d %H:%M:%S UTC')} (raw: 0x{raw_pt:X}, unix: {unix_pt})"
+        )
+    finally:
+        trans.disconnect()
+
+
+@cli.command("firstmode")
+@click.argument("mode_id", type=int)
+@click.pass_obj
+def cmd_firstmode(obj: ContextObject, mode_id: int) -> None:
+    """Set first boot mode (writes mode + 0x53464D00 to miscdata:0x2420)."""
+    trans, channel = obj.get_channel(auto_boot=True)
+    try:
+        set_first_mode(channel, mode_id)
+        console.print(f"[bold green]✔ Firstmode set to {mode_id}[/bold green]")
+    finally:
+        trans.disconnect()
 
 
 @cli.command("partitions")

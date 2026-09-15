@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import struct
+import zlib
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -270,6 +271,44 @@ def erase_all(channel: SpdChannel) -> None:
     logger.info("Storage wipe completed")
 
 
+def build_bootloader_control(slot: str) -> bytes:
+    """Build Android bootloader_control structure matching C set_active.
+
+    Layout (32 bytes total):
+    - slot_suffix: 4B ('_a\0\0' or '_b\0\0')
+    - magic: 4B (0x42414342 / 'BCAB')
+    - version & nb_slot: 4B (0x201)
+    - slot_info[4]: 8B (slot 0 metadata, slot 1 metadata, etc.)
+    - reserved1: 8B
+    - crc32_le: 4B CRC32 over the first 28 bytes
+    """
+    slot_char = slot.lower().strip()
+    if slot_char not in ("a", "b"):
+        raise FlasherError(f"Invalid slot: '{slot}'. Must be 'a' or 'b'.")
+    slot_idx = 0 if slot_char == "a" else 1
+
+    suffix = f"_{slot_char}\x00\x00".encode("ascii")
+    magic = 0x42414342
+    version_and_flags = 0x201
+
+    # slot metadata (2B per slot)
+    slots_meta = bytearray(8)
+    # Active slot: priority=15, tries=6, successful_boot=0 -> 15 | (6 << 4) = 0x6F
+    # Inactive slot: priority=14, tries=1, successful_boot=0 -> 14 | (1 << 4) = 0x1E
+    slots_meta[slot_idx * 2] = 15 | (6 << 4)
+    slots_meta[(1 - slot_idx) * 2] = 14 | (1 << 4)
+
+    reserved1 = b"\x00" * 8
+    header_28b = (
+        suffix
+        + struct.pack("<II", magic, version_and_flags)
+        + bytes(slots_meta)
+        + reserved1
+    )
+    crc = zlib.crc32(header_28b) & 0xFFFFFFFF
+    return header_28b + struct.pack("<I", crc)
+
+
 def write_offset(
     channel: SpdChannel,
     name: str,
@@ -280,9 +319,20 @@ def write_offset(
     logger.info(
         f"Writing {len(data)} bytes to partition '{name}' at offset 0x{offset:X}..."
     )
-    # BSL_CMD_WRITE_PARTITION_VALUE
+    select_payload = build_partition_select_payload(name, offset + len(data))
+    try:
+        channel.exec_cmd(BslCmd.READ_START, select_payload, check_ack=False)
+    except (BslError, BslTimeoutError, FlasherError, OSError) as e:
+        logger.debug(f"Pre-select partition '{name}': {e}")
+
     payload = struct.pack("<I", offset) + data
-    channel.exec_cmd(BslCmd.WRITE_PARTITION_VALUE, payload)
+    try:
+        channel.exec_cmd(BslCmd.WRITE_PARTITION_VALUE, payload)
+    finally:
+        try:
+            channel.exec_cmd(BslCmd.READ_END, check_ack=False)
+        except (BslError, BslTimeoutError, OSError) as e:
+            logger.trace(f"READ_END reset: {e}")
 
 
 def write_value(
@@ -297,16 +347,32 @@ def write_value(
 
 
 def reboot_device(channel: SpdChannel, mode: str = "normal") -> None:
-    """Reboot or power off the connected device."""
+    """Reboot or power off the connected device (matching C spd_dump.c reboot logic)."""
     target_mode = mode.lower().strip()
     logger.info(f"Rebooting device (mode: {target_mode})...")
 
     if target_mode in ("poweroff", "shutdown"):
         channel.exec_cmd(BslCmd.POWER_OFF, check_ack=False)
     elif target_mode == "recovery":
+        # Write "boot-recovery" into partition "misc" at offset 0 (0x800 buffer)
+        miscbuf = bytearray(0x800)
+        miscbuf[:13] = b"boot-recovery"
+        try:
+            write_offset(channel, "misc", 0, bytes(miscbuf))
+        except (BslError, BslTimeoutError, FlasherError, OSError) as e:
+            logger.debug(f"Writing recovery message to 'misc' partition: {e}")
         channel.exec_cmd(BslCmd.SET_FIRST_MODE, struct.pack(">I", 1), check_ack=False)
         channel.exec_cmd(BslCmd.NORMAL_RESET, check_ack=False)
     elif target_mode == "fastboot":
+        # Write "boot-recovery" at offset 0 and "recovery\n--fastboot\n" at offset 0x40
+        miscbuf = bytearray(0x800)
+        miscbuf[:13] = b"boot-recovery"
+        msg = b"recovery\n--fastboot\n"
+        miscbuf[0x40 : 0x40 + len(msg)] = msg
+        try:
+            write_offset(channel, "misc", 0, bytes(miscbuf))
+        except (BslError, BslTimeoutError, FlasherError, OSError) as e:
+            logger.debug(f"Writing fastboot message to 'misc' partition: {e}")
         channel.exec_cmd(BslCmd.SET_FIRST_MODE, struct.pack(">I", 2), check_ack=False)
         channel.exec_cmd(BslCmd.NORMAL_RESET, check_ack=False)
     else:
@@ -314,18 +380,100 @@ def reboot_device(channel: SpdChannel, mode: str = "normal") -> None:
 
 
 def set_active_slot(channel: SpdChannel, slot: str) -> None:
-    """Set active boot slot ('a' or 'b') for VAB/A-B devices."""
-    slot_id = 0 if slot.lower() == "a" else 1
-    logger.info(f"Setting active boot slot to '{slot.lower()}' (id {slot_id})...")
-    channel.exec_cmd(BslCmd.SET_FIRST_MODE, struct.pack(">I", 0x10 + slot_id))
+    """Set active boot slot ('a' or 'b') for VAB/A-B devices.
+
+    Writes Android bootloader_control (BCB) structure to partition 'misc' at offset 0x800
+    with CRC32, and syncs via BSL_CMD_SET_FIRST_MODE (matching C common.c:2218).
+    """
+    slot_char = slot.lower().strip()
+    slot_id = 0 if slot_char == "a" else 1
+    logger.info(f"Setting active boot slot to '{slot_char}' (id {slot_id})...")
+
+    bcb = build_bootloader_control(slot_char)
+    try:
+        write_offset(channel, "misc", 0x800, bcb)
+    except (BslError, BslTimeoutError, FlasherError, OSError) as e:
+        logger.debug(f"Writing BCB to 'misc' partition: {e}")
+
+    channel.exec_cmd(
+        BslCmd.SET_FIRST_MODE, struct.pack(">I", 0x10 + slot_id), check_ack=False
+    )
 
 
-def set_dm_verity(channel: SpdChannel, enable: bool = False) -> None:
-    """Disable or enable dm-verity on Android partitions."""
+def set_dm_verity(channel: SpdChannel, enable: bool = False) -> list[str]:
+    """Disable or enable dm-verity on Android partitions.
+
+    In C common.c:2093, dm-verity toggling writes 0x00 (disable) or 0x02 (enable)
+    to byte offset 0x7B of vbmeta, vbmeta_a, vbmeta_b, and vbmeta_bak.
+    """
     action = "Enabling" if enable else "Disabling"
     logger.info(f"{action} dm-verity...")
-    val = 1 if enable else 0
-    channel.exec_cmd(BslCmd.DISABLE_SELINUX, struct.pack(">I", val), check_ack=False)
+    val_byte = b"\x02" if enable else b"\x00"
+
+    target_candidates = ["vbmeta", "vbmeta_a", "vbmeta_b", "vbmeta_bak"]
+    patched: list[str] = []
+
+    for part_name in target_candidates:
+        try:
+            write_offset(channel, part_name, 0x7B, val_byte)
+            patched.append(part_name)
+            logger.info(
+                f"Patched dm-verity flag on '{part_name}'+0x7B -> 0x{val_byte[0]:02X}"
+            )
+        except (BslError, BslTimeoutError, FlasherError, OSError) as e:
+            logger.debug(f"Could not patch dm-verity on '{part_name}': {e}")
+
+    # Also issue command BSL_CMD_DISABLE_SELINUX as additional layer
+    val_int = 1 if enable else 0
+    channel.exec_cmd(
+        BslCmd.DISABLE_SELINUX, struct.pack(">I", val_int), check_ack=False
+    )
+    return patched
+
+
+def set_first_mode(channel: SpdChannel, mode_id: int) -> None:
+    """Set first boot mode (matching C firstmode command).
+
+    Writes mode + 0x53464D00 into partition 'miscdata' at offset 0x2420,
+    and sends BSL_CMD_SET_FIRST_MODE.
+    """
+    logger.info(f"Setting firstmode to {mode_id}...")
+    magic_val = (mode_id + 0x53464D00) & 0xFFFFFFFF
+    try:
+        write_value(channel, "miscdata", 0x2420, magic_val)
+    except (BslError, BslTimeoutError, FlasherError, OSError) as e:
+        logger.debug(f"Writing firstmode magic to 'miscdata': {e}")
+
+    channel.exec_cmd(
+        BslCmd.SET_FIRST_MODE, struct.pack(">I", mode_id), check_ack=False
+    )
+
+
+def read_pactime(channel: SpdChannel) -> tuple[int, int]:
+    """Read PAC build timestamp from partition 'miscdata' at offset 0x81400.
+
+    Matches C common.c:938 read_pactime().
+    Returns (raw_filetime, unix_timestamp).
+    """
+    logger.debug("Reading PAC build timestamp from miscdata:0x81400...")
+    select_payload = build_partition_select_payload("miscdata", 0x81400 + 8)
+    channel.exec_cmd(BslCmd.READ_START, select_payload)
+
+    try:
+        midst_payload = struct.pack("<II", 8, 0x81400)
+        rep, chunk = channel.exec_cmd(
+            BslCmd.READ_MIDST, midst_payload, check_ack=False
+        )
+        if rep not in (BslRep.ACK, BslRep.READ_FLASH) or len(chunk) < 8:
+            raise FlasherError(
+                f"Failed to read pactime (rep: 0x{rep:02X}, chunk len: {len(chunk)})"
+            )
+        time_raw = struct.unpack("<Q", chunk[:8])[0]
+        unix_time = (time_raw // 10_000_000 - 11644473600) if time_raw else 0
+        logger.info(f"PAC build timestamp: raw=0x{time_raw:X}, unix={unix_time}")
+        return time_raw, unix_time
+    finally:
+        channel.exec_cmd(BslCmd.READ_END, check_ack=False)
 
 
 def read_chip_info(channel: SpdChannel) -> dict[str, str]:

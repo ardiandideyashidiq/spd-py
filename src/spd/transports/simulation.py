@@ -29,7 +29,10 @@ class MockUnisocDevice:
         ("teecfg", 1 * 1024 * 1024),
         ("boot", 64 * 1024 * 1024),
         ("recovery", 64 * 1024 * 1024),
+        ("misc", 1024 * 1024),
+        ("miscdata", 1024 * 1024),
         ("vbmeta", 1024 * 1024),
+        ("vbmeta_bak", 1024 * 1024),
         ("vbmeta_system", 1024 * 1024),
         ("vbmeta_vendor", 1024 * 1024),
         ("dtbo", 8 * 1024 * 1024),
@@ -79,6 +82,11 @@ class MockUnisocDevice:
             elif name == "uboot":
                 buf[:4] = b"UBOT"
             self.partitions[name] = buf
+
+        # Initialize synthetic PAC timestamp at miscdata:0x81400 (2024-01-15 12:00:00 UTC)
+        if "miscdata" in self.partitions:
+            pactime_raw = (1705320000 + 11644473600) * 10_000_000
+            struct.pack_into("<Q", self.partitions["miscdata"], 0x81400, pactime_raw)
 
     def handle_raw_frame(self, raw_frame: bytes) -> list[bytes]:
         """Process an incoming HDLC frame and return response frame(s)."""
@@ -220,7 +228,18 @@ class MockUnisocDevice:
                 chunk = bytes([(offset + i) & 0xFF for i in range(size)])
             responses.append((BslRep.READ_FLASH, chunk))
 
+        elif cmd_type == BslCmd.WRITE_PARTITION_VALUE:
+            if len(payload) >= 4:
+                offset = struct.unpack("<I", payload[:4])[0]
+                data = payload[4:]
+                if self._active_read_part and self._active_read_part in self.partitions:
+                    part_buf = self.partitions[self._active_read_part]
+                    if offset + len(data) <= len(part_buf):
+                        part_buf[offset : offset + len(data)] = data
+            responses.append((BslRep.ACK, b""))
+
         elif cmd_type == BslCmd.READ_END or cmd_type == BslCmd.ERASE_FLASH:
+            self._active_read_part = None
             responses.append((BslRep.ACK, b""))
 
         elif cmd_type == BslCmd.NORMAL_RESET:
