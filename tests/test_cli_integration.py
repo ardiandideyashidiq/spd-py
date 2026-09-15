@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from spd.cli import cli
@@ -17,6 +18,35 @@ def test_cli_help() -> None:
     assert "flash" in result.output
     assert "partitions" in result.output
     assert "simulate" in result.output
+
+
+def test_cli_help_panels() -> None:
+    runner = CliRunner()
+    result = runner.invoke(cli, ["--help"])
+    assert result.exit_code == 0
+    assert "Device" in result.output
+    assert "Flash" in result.output
+    assert "Utilities" in result.output
+
+
+@pytest.mark.parametrize(
+    ("alias", "command"),
+    [
+        ("b", "boot"),
+        ("k", "kick"),
+        ("i", "info"),
+        ("d", "dump"),
+        ("f", "flash"),
+        ("e", "erase"),
+        ("r", "reboot"),
+        ("sh", "shell"),
+    ],
+)
+def test_cli_aliases(alias: str, command: str) -> None:
+    runner = CliRunner()
+    result = runner.invoke(cli, [alias, "--help"])
+    assert result.exit_code == 0
+    assert f"Aliases: {alias}" in result.output
 
 
 def test_cli_sim_info() -> None:

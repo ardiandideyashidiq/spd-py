@@ -6,7 +6,7 @@ import datetime
 import sys
 from pathlib import Path
 
-import click
+import rich_click as click
 
 from .boot.engine import BootEngine, parse_address_from_filename
 from .core.channel import BslError, BslTimeoutError, SpdChannel
@@ -120,6 +120,23 @@ class ContextObject:
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
+@click.command_panel(
+    "Device",
+    commands=[
+        "boot",
+        "kick",
+        "info",
+        "reboot",
+        "slot",
+        "security",
+        "firstmode",
+        "pactime",
+    ],
+)
+@click.command_panel("Flash", commands=["dump", "flash", "erase", "patch", "raw"])
+@click.command_panel(
+    "Utilities", commands=["shell", "simulate", "partitions"]
+)
 @click.option("-p", "--port", help="Serial COM / tty port (e.g. COM3, /dev/ttyUSB0).")
 @click.option(
     "-t",
@@ -203,7 +220,7 @@ def cli(
     setup_logging(verbose)
 
 
-@cli.command("boot")
+@cli.command("boot", aliases=["b"])
 @click.option(
     "--fdl1",
     required=True,
@@ -264,7 +281,7 @@ def cmd_boot(
     trans.disconnect()
 
 
-@cli.command("kick")
+@cli.command("kick", aliases=["k"])
 @click.option(
     "--mode", "-m", default=0, type=int, help="Target boot mode ID (default: 0)."
 )
@@ -288,7 +305,7 @@ def cmd_kick(obj: ContextObject, mode: int, at: bool) -> None:
         trans.disconnect()
 
 
-@cli.command("info")
+@cli.command("info", aliases=["i"])
 @click.pass_obj
 def cmd_info(obj: ContextObject) -> None:
     """Query chip UID, chip type, and hardware status."""
@@ -381,7 +398,7 @@ def cmd_partitions(
     trans.disconnect()
 
 
-@cli.command("dump")
+@cli.command("dump", aliases=["d"])
 @click.argument("target")
 @click.argument("output", required=False)
 @click.option(
@@ -440,7 +457,7 @@ def cmd_dump(
     trans.disconnect()
 
 
-@cli.command("flash")
+@cli.command("flash", aliases=["f"])
 @click.argument("target")
 @click.argument("source", type=click.Path(exists=True, path_type=Path))
 @click.option(
@@ -493,7 +510,7 @@ def cmd_flash(
     trans.disconnect()
 
 
-@cli.command("erase")
+@cli.command("erase", aliases=["e"])
 @click.argument("target")
 @click.option(
     "-y", "--yes", is_flag=True, help="Bypass confirmation prompt for wipe operations."
@@ -546,7 +563,7 @@ def cmd_patch(obj: ContextObject, partition: str, offset: str, target: str) -> N
     trans.disconnect()
 
 
-@cli.command("reboot")
+@cli.command("reboot", aliases=["r"])
 @click.option(
     "-m",
     "--mode",
@@ -592,7 +609,7 @@ def cmd_security(obj: ContextObject, action: str) -> None:
     trans.disconnect()
 
 
-@cli.command("shell")
+@cli.command("shell", aliases=["sh"])
 @click.pass_obj
 def cmd_shell(obj: ContextObject) -> None:
     """Start the interactive REPL shell."""
