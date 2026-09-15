@@ -256,6 +256,24 @@ class MockUnisocDevice:
             self.stage = BslStage.BROM
             responses.append((BslRep.ACK, b""))
 
+        elif cmd_type == BslCmd.REPARTITION:
+            if payload and len(payload) % 0x4C == 0:
+                count = len(payload) // 0x4C
+                for i in range(count):
+                    entry = payload[i * 0x4C : (i + 1) * 0x4C]
+                    name = (
+                        entry[:72]
+                        .decode("utf-16le", errors="ignore")
+                        .split("\x00")[0]
+                        .strip()
+                    )
+                    size_mb = struct.unpack("<I", entry[0x48:0x4C])[0]
+                    if name and name not in self.partitions:
+                        self.partitions[name] = bytearray(
+                            min(size_mb * 1024 * 1024, 1024 * 1024)
+                        )
+            responses.append((BslRep.ACK, b""))
+
         elif cmd_type == BslCmd.POWER_OFF:
             self.stage = BslStage.DISCONNECTED
             responses.append((BslRep.ACK, b""))

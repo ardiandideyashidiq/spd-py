@@ -16,6 +16,7 @@ from ..core.const import (
     BslCmd,
     BslRep,
 )
+from ..core.crc import spd_crc16
 from ..partitions.table import PartitionTable
 
 if TYPE_CHECKING:
@@ -171,6 +172,89 @@ def dump_all(
     return saved_files
 
 
+def prepare_nv_image(data: bytes) -> tuple[bytes, int]:
+    """Calculate CRC16 and additive checksum across NV items (matching C load_nv_partition)."""
+    mem = bytearray(data)
+
+    # Skip 0x200 header if starts with 'NV' magic (0x4E56)
+    if len(mem) >= 4 and (mem[:2] == b"NV" or mem[:2] == b"VN"):
+        mem = mem[0x200:]
+
+    # If too short, return as-is
+    if len(mem) < 4:
+        return bytes(mem), sum(mem) & 0xFFFFFFFF
+
+    # Compute CRC16 over data after 2-byte CRC header
+    crc = spd_crc16(0, mem[2:])
+    struct.pack_into(">H", mem, 0, crc)
+
+    # 32-bit additive checksum over entire buffer
+    cs = sum(mem) & 0xFFFFFFFF
+    return bytes(mem), cs
+
+
+def flash_nv_partition(
+    channel: SpdChannel,
+    name: str,
+    input_source: str | Path | bytes,
+    blk_size: int = 4096,
+    progress_callback: Callable[[int, int], None] | None = None,
+) -> int:
+    """Flash fixed NV partition with auto-calculated CRC and checksum (matching C load_nv_partition)."""
+    if isinstance(input_source, (str, Path)):
+        src_path = Path(input_source)
+        if not src_path.exists():
+            raise FlasherError(f"NV file not found: {src_path}")
+        raw_data = src_path.read_bytes()
+    else:
+        raw_data = input_source
+
+    nv_bytes, checksum = prepare_nv_image(raw_data)
+    total_len = len(nv_bytes)
+    logger.info(
+        f"Flashing NV partition '{name}' ({total_len} bytes, checksum: 0x{checksum:08X})..."
+    )
+
+    # Packet structure: 72B name UTF-16LE + 4B size LE + 4B checksum LE = 80 bytes
+    name_buf = bytearray(72)
+    name_encoded = name.encode("utf-16le")[:72]
+    name_buf[: len(name_encoded)] = name_encoded
+    start_payload = bytes(name_buf) + struct.pack("<II", total_len, checksum)
+
+    channel.exec_cmd(BslCmd.START_DATA, start_payload)
+
+    offset = 0
+    try:
+        while offset < total_len:
+            chunk = nv_bytes[offset : offset + blk_size]
+            channel.exec_cmd(BslCmd.MIDST_DATA, chunk)
+            offset += len(chunk)
+            if progress_callback:
+                progress_callback(offset, total_len)
+    finally:
+        channel.exec_cmd(BslCmd.END_DATA)
+
+    logger.info(f"Successfully flashed NV partition '{name}' ({offset} bytes)")
+    return offset
+
+
+def repartition(
+    channel: SpdChannel,
+    xml_source: str | Path | PartitionTable,
+) -> int:
+    """Repartition device storage using an XML partition table definition (matching C repartition)."""
+    if isinstance(xml_source, PartitionTable):
+        ptable = xml_source
+    else:
+        ptable = PartitionTable.from_xml(xml_source)
+
+    logger.info(f"Repartitioning storage with {len(ptable)} partitions...")
+    bin_table = ptable.to_bsl_binary()
+    channel.exec_cmd(BslCmd.REPARTITION, bin_table)
+    logger.info("Repartition command executed successfully")
+    return len(ptable)
+
+
 def flash_partition(
     channel: SpdChannel,
     name: str,
@@ -179,6 +263,16 @@ def flash_partition(
     progress_callback: Callable[[int, int], None] | None = None,
 ) -> int:
     """Flash a binary image to the specified partition."""
+    # Special handling for fixnv/fixnv1: auto checksumming
+    if "fixnv" in name.lower():
+        return flash_nv_partition(
+            channel,
+            name=name,
+            input_source=input_source,
+            blk_size=blk_size,
+            progress_callback=progress_callback,
+        )
+
     if isinstance(input_source, (str, Path)):
         src_path = Path(input_source)
         if not src_path.exists():

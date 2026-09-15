@@ -119,6 +119,16 @@ class PartitionTable:
         return cls(partitions=partitions, storage_type=storage_type)
 
     @classmethod
+    def from_xml(cls, xml_source: str | Path) -> PartitionTable:
+        """Load partition table from XML file path or raw XML string."""
+        if isinstance(xml_source, Path) or (
+            isinstance(xml_source, str) and Path(xml_source).exists()
+        ):
+            content = Path(xml_source).read_text(encoding="utf-8")
+            return cls.parse_xml(content)
+        return cls.parse_xml(str(xml_source))
+
+    @classmethod
     def parse_xml(cls, xml_text: str) -> PartitionTable:
         """Parse Unisoc partition list XML (SC6531 / Android partition XMLs)."""
         partitions: list[Partition] = []
@@ -166,6 +176,23 @@ class PartitionTable:
             size_mb = max(1, p.size // (1024 * 1024))
             ET.SubElement(root, "Partition", {"id": p.name, "size": str(size_mb)})
         return ET.tostring(root, encoding="utf-8").decode("utf-8")
+
+    def to_bsl_binary(self) -> bytes:
+        """Encode partitions into Unisoc 0x4C binary table (matching C scan_xml_partitions).
+
+        Each entry is 0x4C (76) bytes:
+        - 0x00..0x48: UTF-16LE partition name (null terminated, up to 36 chars)
+        - 0x48..0x4C: uint32 LE size in MB
+        """
+        table = bytearray()
+        for p in self.partitions:
+            entry = bytearray(0x4C)
+            name_encoded = p.name.encode("utf-16le")[:72]
+            entry[: len(name_encoded)] = name_encoded
+            size_mb = max(1, p.size // (1024 * 1024))
+            struct.pack_into("<I", entry, 0x48, size_mb)
+            table.extend(entry)
+        return bytes(table)
 
     def save_manifest(self, file_path: str | Path) -> None:
         """Save partition table as a JSON manifest file for backup / restore."""

@@ -25,6 +25,7 @@ from .flasher.operations import (
     read_pactime,
     read_partition_table,
     reboot_device,
+    repartition,
     set_active_slot,
     set_dm_verity,
     set_first_mode,
@@ -346,12 +347,28 @@ def cmd_firstmode(obj: ContextObject, mode_id: int) -> None:
     type=click.Path(path_type=Path),
     help="Export partition manifest to JSON.",
 )
+@click.option(
+    "--repartition",
+    "repart_xml",
+    type=click.Path(exists=True, path_type=Path),
+    help="Repartition device storage from XML partition table.",
+)
 @click.pass_obj
 def cmd_partitions(
-    obj: ContextObject, xml: Path | None, json_path: Path | None
+    obj: ContextObject,
+    xml: Path | None,
+    json_path: Path | None,
+    repart_xml: Path | None,
 ) -> None:
-    """Read and display on-flash partition table."""
+    """Read, export, or repartition device storage."""
     trans, channel = obj.get_channel(auto_boot=True)
+
+    if repart_xml:
+        count = repartition(channel, repart_xml)
+        console.print(
+            f"[bold green]Device repartitioned with {count} partitions from {repart_xml}[/bold green]"
+        )
+
     ptable = read_partition_table(channel)
     render_partition_table(ptable)
 
