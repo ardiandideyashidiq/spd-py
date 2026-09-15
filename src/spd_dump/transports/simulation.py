@@ -120,6 +120,15 @@ class MockUnisocDevice:
         elif cmd_type == BslCmd.START_DATA:
             # Download file or write to partition
             self._active_write_buffer.clear()
+            if len(payload) >= 72:
+                name_raw = (
+                    payload[:72]
+                    .decode("utf-16le", errors="ignore")
+                    .split("\x00")[0]
+                    .strip()
+                )
+                if name_raw:
+                    self._active_write_part = name_raw
             responses.append((BslRep.ACK, b""))
 
         elif cmd_type == BslCmd.MIDST_DATA:
@@ -162,17 +171,37 @@ class MockUnisocDevice:
 
         elif cmd_type == BslCmd.READ_START:
             # Payload contains target name / id / size
+            if len(payload) >= 72:
+                name_raw = (
+                    payload[:72]
+                    .decode("utf-16le", errors="ignore")
+                    .split("\x00")[0]
+                    .strip()
+                )
+                if name_raw:
+                    self._active_read_part = name_raw
             responses.append((BslRep.ACK, struct.pack(">I", 0x1000)))  # blk_size = 4096
 
         elif cmd_type == BslCmd.READ_MIDST:
-            # Request chunk: offset (4B), size (4B)
-            offset = 0
+            # Request chunk: size (4B LE), offset (4B LE)
             size = 4096
+            offset = 0
             if len(payload) >= 8:
-                offset, size = struct.unpack(">II", payload[:8])
-            # Return synthetic data pattern
-            chunk = bytes([(offset + i) & 0xFF for i in range(size)])
-            responses.append((BslRep.ACK, chunk))
+                size, offset = struct.unpack("<II", payload[:8])
+            # Return synthetic data pattern or partition data if available
+            if self._active_read_part and self._active_read_part in self.partitions:
+                part_buf = self.partitions[self._active_read_part]
+                chunk = bytes(part_buf[offset : offset + size])
+                if len(chunk) < size:
+                    chunk += bytes(
+                        [
+                            (offset + len(chunk) + i) & 0xFF
+                            for i in range(size - len(chunk))
+                        ]
+                    )
+            else:
+                chunk = bytes([(offset + i) & 0xFF for i in range(size)])
+            responses.append((BslRep.READ_FLASH, chunk))
 
         elif cmd_type == BslCmd.READ_END or cmd_type == BslCmd.ERASE_FLASH:
             responses.append((BslRep.ACK, b""))
