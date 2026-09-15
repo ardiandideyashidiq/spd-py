@@ -494,3 +494,134 @@ def read_chip_info(channel: SpdChannel) -> dict[str, str]:
         info["Chip Type"] = "Unknown"
 
     return info
+
+
+def read_mem(
+    channel: SpdChannel,
+    start_addr: int,
+    size: int,
+    output_path: str | Path,
+    blk_size: int = 1024,
+    progress_callback: Callable[[int, int], None] | None = None,
+) -> int:
+    """Read physical device memory contents to a file (matching C dump_mem)."""
+    out_file = Path(output_path)
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+
+    logger.info(f"Reading {size} bytes from memory address 0x{start_addr:08X}...")
+    total_read = 0
+    curr_offset = start_addr
+
+    with out_file.open("wb") as f:
+        while curr_offset < start_addr + size:
+            remaining = (start_addr + size) - curr_offset
+            chunk_len = min(remaining, blk_size)
+
+            # Matches C dump_mem: 3 BE 32-bit words: (offset, n, 0)
+            payload = struct.pack(">III", curr_offset, chunk_len, 0)
+            rep, chunk = channel.exec_cmd(BslCmd.READ_MIDST, payload, check_ack=False)
+            if rep not in (BslRep.ACK, BslRep.READ_FLASH):
+                raise FlasherError(
+                    f"READ_MIDST memory dump failed at 0x{curr_offset:08X} with response 0x{rep:02X}"
+                )
+            if not chunk:
+                break
+            f.write(chunk)
+            n = len(chunk)
+            total_read += n
+            curr_offset += n
+            if progress_callback:
+                progress_callback(total_read, size)
+
+    logger.info(f"Successfully dumped {total_read} bytes to {out_file}")
+    return total_read
+
+
+def read_flash(
+    channel: SpdChannel,
+    addr: int,
+    offset: int,
+    size: int,
+    output_path: str | Path,
+    blk_size: int = 1024,
+    progress_callback: Callable[[int, int], None] | None = None,
+) -> int:
+    """Read raw flash memory contents to a file (matching C dump_flash)."""
+    out_file = Path(output_path)
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+
+    logger.info(f"Reading {size} bytes from flash 0x{addr:08X}+0x{offset:X}...")
+    total_read = 0
+    curr_offset = offset
+
+    with out_file.open("wb") as f:
+        while curr_offset < offset + size:
+            remaining = (offset + size) - curr_offset
+            chunk_len = min(remaining, blk_size)
+
+            # Matches C dump_flash: 3 BE 32-bit words: (addr, n, offset)
+            payload = struct.pack(">III", addr, chunk_len, curr_offset)
+            rep, chunk = channel.exec_cmd(BslCmd.READ_FLASH, payload, check_ack=False)
+            if rep not in (BslRep.ACK, BslRep.READ_FLASH):
+                raise FlasherError(
+                    f"READ_FLASH failed at offset 0x{curr_offset:X} with response 0x{rep:02X}"
+                )
+            if not chunk:
+                break
+            f.write(chunk)
+            n = len(chunk)
+            total_read += n
+            curr_offset += n
+            if progress_callback:
+                progress_callback(total_read, size)
+
+    logger.info(f"Successfully dumped {total_read} flash bytes to {out_file}")
+    return total_read
+
+
+def write_flash(
+    channel: SpdChannel,
+    addr: int,
+    input_source: str | Path | bytes,
+    blk_size: int = DEFAULT_BLK_SIZE,
+    progress_callback: Callable[[int, int], None] | None = None,
+) -> int:
+    """Write binary image directly to target physical memory/flash address (matching C send / write_flash)."""
+    if isinstance(input_source, (str, Path)):
+        src_path = Path(input_source)
+        if not src_path.exists():
+            raise FlasherError(f"Image file not found: {src_path}")
+        data = src_path.read_bytes()
+    else:
+        data = input_source
+
+    total_len = len(data)
+    logger.info(f"Writing {total_len} bytes to physical address 0x{addr:08X}...")
+
+    # BSL_CMD_START_DATA: [Address: 4B BE] [Length: 4B BE]
+    start_payload = struct.pack(">II", addr, total_len)
+    channel.exec_cmd(BslCmd.START_DATA, start_payload)
+
+    offset = 0
+    try:
+        while offset < total_len:
+            chunk = data[offset : offset + blk_size]
+            channel.exec_cmd(BslCmd.MIDST_DATA, chunk)
+            offset += len(chunk)
+            if progress_callback:
+                progress_callback(offset, total_len)
+    finally:
+        channel.exec_cmd(BslCmd.END_DATA)
+
+    logger.info(f"Successfully wrote {offset} bytes to 0x{addr:08X}")
+    return offset
+
+
+def write_physical_word(
+    channel: SpdChannel,
+    addr: int,
+    value: int,
+) -> None:
+    """Write a 32-bit word directly to physical memory address (matching C write_word)."""
+    val_bytes = struct.pack(">I", value & 0xFFFFFFFF)
+    write_flash(channel, addr, val_bytes, blk_size=4)

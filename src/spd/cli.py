@@ -20,13 +20,17 @@ from .flasher.operations import (
     flash_all,
     flash_partition,
     read_chip_info,
+    read_flash,
+    read_mem,
     read_pactime,
     read_partition_table,
     reboot_device,
     set_active_slot,
     set_dm_verity,
     set_first_mode,
+    write_flash,
     write_offset,
+    write_physical_word,
     write_value,
 )
 from .transports.base import BaseTransport
@@ -625,4 +629,106 @@ def cmd_simulate(obj: ContextObject, delay_ms: float) -> None:
     console.print(
         "\n[bold green]Simulation demonstration completed successfully![/bold green]"
     )
+    trans.disconnect()
+
+
+@cli.group("raw")
+def raw_group() -> None:
+    """Direct physical memory and flash I/O operations (no partition table required)."""
+
+
+@raw_group.command("read-mem")
+@click.argument("addr")
+@click.argument("size")
+@click.argument("output", type=click.Path(path_type=Path))
+@click.option("--blk-size", default=1024, help="Block size in bytes.")
+@click.pass_obj
+def cmd_raw_read_mem(
+    obj: ContextObject, addr: str, size: str, output: Path, blk_size: int
+) -> None:
+    """Read physical RAM/memory from specified address to file (matches C dump_mem)."""
+    trans, channel = obj.get_channel(auto_boot=True)
+    a = int(addr, 0)
+    s = int(size, 0)
+    with TransferProgressBar(f"Reading Memory 0x{a:X}") as pb:
+        read_mem(
+            channel,
+            a,
+            s,
+            output,
+            blk_size=blk_size,
+            progress_callback=pb.callback(),
+        )
+    console.print(f"[bold green]Saved memory dump to {output}[/bold green]")
+    trans.disconnect()
+
+
+@raw_group.command("read-flash")
+@click.argument("addr")
+@click.argument("offset")
+@click.argument("size")
+@click.argument("output", type=click.Path(path_type=Path))
+@click.option("--blk-size", default=1024, help="Block size in bytes.")
+@click.pass_obj
+def cmd_raw_read_flash(
+    obj: ContextObject,
+    addr: str,
+    offset: str,
+    size: str,
+    output: Path,
+    blk_size: int,
+) -> None:
+    """Read raw flash from specified address + offset to file (matches C dump_flash)."""
+    trans, channel = obj.get_channel(auto_boot=True)
+    a = int(addr, 0)
+    off = int(offset, 0)
+    s = int(size, 0)
+    with TransferProgressBar(f"Reading Flash 0x{a:X}") as pb:
+        read_flash(
+            channel,
+            a,
+            off,
+            s,
+            output,
+            blk_size=blk_size,
+            progress_callback=pb.callback(),
+        )
+    console.print(f"[bold green]Saved flash dump to {output}[/bold green]")
+    trans.disconnect()
+
+
+@raw_group.command("write-flash")
+@click.argument("addr")
+@click.argument("source", type=click.Path(exists=True, path_type=Path))
+@click.option("--blk-size", default=DEFAULT_BLK_SIZE, help="Block size in bytes.")
+@click.pass_obj
+def cmd_raw_write_flash(
+    obj: ContextObject, addr: str, source: Path, blk_size: int
+) -> None:
+    """Write binary image directly to target physical memory/flash address."""
+    trans, channel = obj.get_channel(auto_boot=True)
+    a = int(addr, 0)
+    with TransferProgressBar(f"Writing Flash 0x{a:X}") as pb:
+        write_flash(
+            channel,
+            a,
+            source,
+            blk_size=blk_size,
+            progress_callback=pb.callback(),
+        )
+    console.print(f"[bold green]Successfully wrote {source} to 0x{a:X}[/bold green]")
+    trans.disconnect()
+
+
+@raw_group.command("write-word")
+@click.argument("addr")
+@click.argument("value")
+@click.pass_obj
+def cmd_raw_write_word(obj: ContextObject, addr: str, value: str) -> None:
+    """Write a 32-bit word directly to physical memory address (matches C write_word)."""
+    trans, channel = obj.get_channel(auto_boot=True)
+    a = int(addr, 0)
+    v = int(value, 0)
+    write_physical_word(channel, a, v)
+    console.print(f"[bold green]Written 0x{v:08X} to 0x{a:08X}[/bold green]")
     trans.disconnect()

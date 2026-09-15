@@ -207,12 +207,22 @@ class MockUnisocDevice:
                     self._active_read_part = name_raw
             responses.append((BslRep.ACK, struct.pack(">I", 0x1000)))  # blk_size = 4096
 
+        elif cmd_type == BslCmd.READ_FLASH:
+            addr, size, offset = 0, 1024, 0
+            if len(payload) >= 12:
+                addr, size, offset = struct.unpack(">III", payload[:12])
+            chunk = bytes([(addr + offset + i) & 0xFF for i in range(size)])
+            responses.append((BslRep.READ_FLASH, chunk))
+
         elif cmd_type == BslCmd.READ_MIDST:
-            # Request chunk: size (4B LE), offset (4B LE)
             size = 4096
             offset = 0
-            if len(payload) >= 8:
+            if not self._active_read_part and len(payload) >= 12:
+                # Memory dump format: BE (offset, size, 0)
+                offset, size, _ = struct.unpack(">III", payload[:12])
+            elif len(payload) >= 8:
                 size, offset = struct.unpack("<II", payload[:8])
+
             # Return synthetic data pattern or partition data if available
             if self._active_read_part and self._active_read_part in self.partitions:
                 part_buf = self.partitions[self._active_read_part]
