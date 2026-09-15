@@ -2,12 +2,12 @@
 
 from pathlib import Path
 
-from spd_dump.boot.engine import BootEngine, parse_address_from_filename
-from spd_dump.core.channel import SpdChannel
-from spd_dump.core.const import BslStage
-from spd_dump.partitions.partition import Partition
-from spd_dump.partitions.table import PartitionTable
-from spd_dump.transports.simulation import MockUnisocDevice, SimulationTransport
+from spd.boot.engine import BootEngine, parse_address_from_filename
+from spd.core.channel import SpdChannel
+from spd.core.const import BslStage
+from spd.partitions.partition import Partition
+from spd.partitions.table import PartitionTable
+from spd.transports.simulation import MockUnisocDevice, SimulationTransport
 
 
 def test_partition_model() -> None:

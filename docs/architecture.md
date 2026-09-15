@@ -50,7 +50,7 @@
 
 ---
 
-## 1. Core Protocol Layer (`spd_dump.core`)
+## 1. Core Protocol Layer (`spd.core`)
 
 The protocol layer implements the Unisoc / Spreadtrum BSL frame standard:
 - **`const.py`**: Clean, type-safe `IntEnum` classes (`BslCmd`, `BslRep`, `BslStage`) and human-readable error descriptions.
@@ -66,7 +66,7 @@ The protocol layer implements the Unisoc / Spreadtrum BSL frame standard:
 
 ---
 
-## 2. Pluggable Transport Layer (`spd_dump.transports`)
+## 2. Pluggable Transport Layer (`spd.transports`)
 
 All physical communication mechanisms inherit from `BaseTransport`:
 - **`UsbTransport`**: Native bulk USB I/O using PyUSB. Automatically locates VID `0x1782` (Spreadtrum), claims endpoints, detaches Linux kernel drivers, and supports Android Termux `--usb-fd`.
@@ -76,7 +76,7 @@ All physical communication mechanisms inherit from `BaseTransport`:
 
 ---
 
-## 3. Partition Management (`spd_dump.partitions`)
+## 3. Partition Management (`spd.partitions`)
 
 - **`Partition`**: Dataclass model representing partition boundaries, size, slot detection (`_a`, `_b`), and user-data classification.
 - **`PartitionTable`**:
@@ -86,7 +86,7 @@ All physical communication mechanisms inherit from `BaseTransport`:
 
 ---
 
-## 4. Boot & Flasher Engine (`spd_dump.boot` & `spd_dump.flasher`)
+## 4. Boot & Flasher Engine (`spd.boot` & `spd.flasher`)
 
 - **`BootEngine`**: Multi-stage bootstrapping:
   - BROM synchronization burst.

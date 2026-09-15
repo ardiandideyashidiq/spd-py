@@ -2,12 +2,12 @@
 
 import pytest
 
-from spd_dump.core.channel import SpdChannel
-from spd_dump.core.const import BslCmd, BslRep
-from spd_dump.transports.base import TransportError
-from spd_dump.transports.channel9 import Channel9Transport
-from spd_dump.transports.factory import create_transport
-from spd_dump.transports.simulation import MockUnisocDevice, SimulationTransport
+from spd.core.channel import SpdChannel
+from spd.core.const import BslCmd, BslRep
+from spd.transports.base import TransportError
+from spd.transports.channel9 import Channel9Transport
+from spd.transports.factory import create_transport
+from spd.transports.simulation import MockUnisocDevice, SimulationTransport
 
 
 def test_simulation_transport_lifecycle() -> None:

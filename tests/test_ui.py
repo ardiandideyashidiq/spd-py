@@ -2,13 +2,13 @@
 
 from pathlib import Path
 
-from spd_dump.core.channel import SpdChannel
-from spd_dump.partitions.partition import Partition
-from spd_dump.partitions.table import PartitionTable
-from spd_dump.transports.simulation import SimulationTransport
-from spd_dump.ui.progress import TransferProgressBar
-from spd_dump.ui.shell import SpdInteractiveShell
-from spd_dump.ui.tables import render_device_info, render_partition_table
+from spd.core.channel import SpdChannel
+from spd.partitions.partition import Partition
+from spd.partitions.table import PartitionTable
+from spd.transports.simulation import SimulationTransport
+from spd.ui.progress import TransferProgressBar
+from spd.ui.shell import SpdInteractiveShell
+from spd.ui.tables import render_device_info, render_partition_table
 
 
 def test_progress_bar_context() -> None:
@@ -39,7 +39,7 @@ def test_shell_command_dispatch(tmp_path: Path, monkeypatch) -> None:
     channel = SpdChannel(trans, default_timeout=1.0)
 
     # Patch read_partition_table to return small partitions so dump tests are instant
-    import spd_dump.flasher.operations as ops
+    import spd.flasher.operations as ops
 
     monkeypatch.setattr(
         ops,

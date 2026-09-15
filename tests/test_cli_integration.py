@@ -4,7 +4,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from spd_dump.cli import cli
+from spd.cli import cli
 
 
 def test_cli_help() -> None:
@@ -36,9 +36,9 @@ def test_cli_sim_partitions(tmp_path: Path) -> None:
 
 
 def test_cli_sim_dump(tmp_path: Path, monkeypatch) -> None:
-    import spd_dump.flasher.operations as ops
-    from spd_dump.partitions.partition import Partition
-    from spd_dump.partitions.table import PartitionTable
+    import spd.flasher.operations as ops
+    from spd.partitions.partition import Partition
+    from spd.partitions.table import PartitionTable
 
     monkeypatch.setattr(
         ops,

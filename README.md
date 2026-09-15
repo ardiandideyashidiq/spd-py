@@ -20,7 +20,7 @@ A modern, modular, cross-platform Python implementation of the Unisoc BSL (Bootl
   - **Android (Termux)**: OTG passthrough via `--usb-fd`.
   - **Windows x64**: Native USB & virtual COM port support.
   - **Windows x86 Legacy**: Dedicated `Channel9.dll` support with automatic fallback to `pyserial`.
-- **DRY & Modular Architecture**: HDLC framing, CRC16, checksums, and packet handling live in `spd_dump.core` and are never duplicated.
+- **DRY & Modular Architecture**: HDLC framing, CRC16, checksums, and packet handling live in `spd.core` and are never duplicated.
 
 ---
 

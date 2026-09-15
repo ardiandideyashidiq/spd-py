@@ -1,11 +1,11 @@
-"""Unit tests for spd_dump.core protocol, framing, CRC, and channel."""
+"""Unit tests for spd.core protocol, framing, CRC, and channel."""
 
 import pytest
 
-from spd_dump.core.channel import BslError, SpdChannel
-from spd_dump.core.const import BslCmd, BslRep
-from spd_dump.core.crc import spd_checksum, spd_crc16
-from spd_dump.core.framing import (
+from spd.core.channel import BslError, SpdChannel
+from spd.core.const import BslCmd, BslRep
+from spd.core.crc import spd_checksum, spd_crc16
+from spd.core.framing import (
     StreamFrameDecoder,
     decode_frame,
     encode_frame,

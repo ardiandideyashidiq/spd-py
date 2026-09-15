@@ -2,8 +2,8 @@
 
 from pathlib import Path
 
-from spd_dump.core.channel import SpdChannel
-from spd_dump.flasher.operations import (
+from spd.core.channel import SpdChannel
+from spd.flasher.operations import (
     dump_all,
     dump_partition,
     erase_all,
@@ -18,9 +18,9 @@ from spd_dump.flasher.operations import (
     write_offset,
     write_value,
 )
-from spd_dump.partitions.partition import Partition
-from spd_dump.partitions.table import PartitionTable
-from spd_dump.transports.simulation import MockUnisocDevice, SimulationTransport
+from spd.partitions.partition import Partition
+from spd.partitions.table import PartitionTable
+from spd.transports.simulation import MockUnisocDevice, SimulationTransport
 
 
 def get_connected_channel() -> tuple[SimulationTransport, SpdChannel]:
@@ -72,7 +72,7 @@ def test_dump_all_operation(tmp_path: Path) -> None:
     out_dir = tmp_path / "backup"
 
     # Mock read_partition_table to return small test table
-    import spd_dump.flasher.operations as ops
+    import spd.flasher.operations as ops
 
     orig_read_ptable = ops.read_partition_table
     ops.read_partition_table = lambda ch: PartitionTable(
