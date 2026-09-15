@@ -25,6 +25,7 @@ SPRD_PIDS = (0x4D00, 0x5D00, 0x0001, 0x0002, 0x0003)
 
 class BslStage(IntEnum):
     """Execution stages of Unisoc BSL."""
+
     DISCONNECTED = 0
     BROM = 1
     FDL1 = 2
@@ -34,6 +35,7 @@ class BslStage(IntEnum):
 @unique
 class BslCmd(IntEnum):
     """Unisoc BSL protocol request command IDs."""
+
     CONNECT = 0x00
     START_DATA = 0x01
     MIDST_DATA = 0x02
@@ -105,6 +107,7 @@ class BslCmd(IntEnum):
 @unique
 class BslRep(IntEnum):
     """Unisoc BSL protocol response status codes."""
+
     ACK = 0x80
     VER = 0x81
     INVALID_CMD = 0x82

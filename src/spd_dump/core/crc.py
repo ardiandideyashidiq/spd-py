@@ -5,8 +5,7 @@ CHK_ORIG = 2
 
 # Precomputed lookup table for CCITT CRC-16 (poly 0x1021)
 _CRC16_TABLE = [
-    ((i << 8) ^ (((i << 8) & 0x8000) and 0x1021)) & 0xFFFF
-    for i in range(256)
+    ((i << 8) ^ (((i << 8) & 0x8000) and 0x1021)) & 0xFFFF for i in range(256)
 ]
 
 
@@ -26,7 +25,9 @@ def spd_crc16(crc: int, data: bytes | bytearray | memoryview) -> int:
     return crc & 0xFFFF
 
 
-def spd_checksum(crc: int, data: bytes | bytearray | memoryview, final: int = CHK_FIXZERO) -> int:
+def spd_checksum(
+    crc: int, data: bytes | bytearray | memoryview, final: int = CHK_FIXZERO
+) -> int:
     """Calculate 16-bit Internet-style checksum matching spreadtrum_flash common.c:spd_checksum.
 
     Sums 16-bit words (little-endian: byte1 << 8 | byte0), adds final odd byte if present,

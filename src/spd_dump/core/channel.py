@@ -26,7 +26,9 @@ if TYPE_CHECKING:
 class BslError(Exception):
     """Exception raised when a BSL command fails or returns an error status."""
 
-    def __init__(self, rep_code: int, message: str | None = None, payload: bytes = b"") -> None:
+    def __init__(
+        self, rep_code: int, message: str | None = None, payload: bytes = b""
+    ) -> None:
         self.rep_code = rep_code
         self.payload = payload
         desc = message or get_response_description(rep_code)
@@ -52,7 +54,9 @@ class SpdChannel:
         self.transport = transport
         self.default_timeout = default_timeout
         self.stage = BslStage.DISCONNECTED
-        self.flags = FLAGS_TRANSCODE  # Default flags: transcode enabled, sum-check enabled
+        self.flags = (
+            FLAGS_TRANSCODE  # Default flags: transcode enabled, sum-check enabled
+        )
         self.on_log_message = on_log_message or self._default_log_handler
         self._decoder = StreamFrameDecoder(
             use_crc16=self.use_crc16,
@@ -105,7 +109,9 @@ class SpdChannel:
 
         Filters out asynchronous device logs (BSL_REP_LOG 0xFF).
         """
-        deadline = time.monotonic() + (timeout if timeout is not None else self.default_timeout)
+        deadline = time.monotonic() + (
+            timeout if timeout is not None else self.default_timeout
+        )
 
         while True:
             # Check if any frames already decoded
