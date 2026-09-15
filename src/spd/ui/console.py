@@ -51,7 +51,7 @@ def setup_logging(verbose: int = 0) -> None:
 def print_banner() -> None:
     """Print stylish banner for Unisoc Flash Tool."""
     console.print(
-        "[bold cyan]⚡ Unisoc / Spreadtrum Flash Tool (spd-py)[/bold cyan] [dim]v0.1.0[/dim]",
+        "[bold cyan]Unisoc / Spreadtrum Flash Tool (spd-py)[/bold cyan] [dim]v0.1.0[/dim]",
         style="header",
     )
     console.print("[dim]Next-generation BSL protocol firmware utility[/dim]\n")

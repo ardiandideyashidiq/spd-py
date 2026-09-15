@@ -1,4 +1,4 @@
-# ⚡ spd-py: Unisoc / Spreadtrum Firmware Tool
+# spd-py: Unisoc / Spreadtrum Firmware Tool
 
 A modern, modular, cross-platform Python implementation of the Unisoc BSL (Bootloader Serial Link) flasher and firmware dumper, porting and superseding `spreadtrum_flash` (`spd_dump`).
 
@@ -8,7 +8,7 @@ A modern, modular, cross-platform Python implementation of the Unisoc BSL (Bootl
 
 ---
 
-## ✨ Features
+## Features
 
 - **Intuitive Subcommand CLI**: Clean verbs (`dump`, `flash`, `erase`, `partitions`, `reboot`, `slot`, `security`, `kick`, `pactime`, `firstmode`, `raw`) replace cryptic single-letter commands.
 - **100% C Codebase Feature Parity**:
@@ -33,7 +33,7 @@ A modern, modular, cross-platform Python implementation of the Unisoc BSL (Bootl
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Installation
 
@@ -79,7 +79,7 @@ spd reboot -m recovery
 
 ---
 
-## 📖 Documentation
+## Documentation
 
 Detailed technical documentation is available in the [`docs/`](docs/) directory:
 
@@ -90,7 +90,7 @@ Detailed technical documentation is available in the [`docs/`](docs/) directory:
 
 ---
 
-## 🧪 Running Tests
+## Running Tests
 
 Run the complete test suite:
 ```bash
@@ -105,6 +105,12 @@ uv run ruff format --check
 
 ---
 
-## 📜 License
+## Credits
+
+This project ports and supersedes the original C implementation of [spreadtrum_flash](https://github.com/TomKing062/spreadtrum_flash) (`spd_dump`).
+
+---
+
+## License
 
 MIT License.

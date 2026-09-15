@@ -200,7 +200,7 @@ def cli(
     kick: bool,
     kick_to: int,
 ) -> None:
-    """⚡ Unisoc / Spreadtrum Firmware Tool (spd-py)."""
+    """Unisoc / Spreadtrum Firmware Tool (spd-py)."""
     obj = ContextObject()
     obj.port = port
     obj.transport_type = transport
@@ -295,11 +295,11 @@ def cmd_kick(obj: ContextObject, mode: int, at: bool) -> None:
         success = engine.kick(bootmode=mode, at=at, timeout=obj.timeout)
         if success:
             console.print(
-                "[bold green]✔ Device successfully kicked into download mode[/bold green]"
+                "[bold green]Device successfully kicked into download mode[/bold green]"
             )
         else:
             console.print(
-                "[bold yellow]⚠ Kick command sent; verify phone state[/bold yellow]"
+                "[bold yellow]Kick command sent; verify phone state[/bold yellow]"
             )
     finally:
         trans.disconnect()
@@ -347,7 +347,7 @@ def cmd_firstmode(obj: ContextObject, mode_id: int) -> None:
     trans, channel = obj.get_channel(auto_boot=True)
     try:
         set_first_mode(channel, mode_id)
-        console.print(f"[bold green]✔ Firstmode set to {mode_id}[/bold green]")
+        console.print(f"[bold green]Firstmode set to {mode_id}[/bold green]")
     finally:
         trans.disconnect()
 
