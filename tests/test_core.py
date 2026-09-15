@@ -74,14 +74,16 @@ def test_encode_decode_frame() -> None:
 
     # Default sum-check + transcode
     frame = encode_frame(BslCmd.CONNECT, payload, use_crc16=False, use_transcode=True)
-    assert frame.startswith(b"\x7E")
-    assert frame.endswith(b"\x7E")
+    assert frame.startswith(b"\x7e")
+    assert frame.endswith(b"\x7e")
     cmd, dec_payload = decode_frame(frame, use_crc16=False, use_transcode=True)
     assert cmd == BslCmd.CONNECT
     assert dec_payload == payload
 
     # CRC16 mode
-    frame_crc = encode_frame(BslCmd.READ_FLASH, payload, use_crc16=True, use_transcode=True)
+    frame_crc = encode_frame(
+        BslCmd.READ_FLASH, payload, use_crc16=True, use_transcode=True
+    )
     cmd, dec_payload = decode_frame(frame_crc, use_crc16=True, use_transcode=True)
     assert cmd == BslCmd.READ_FLASH
     assert dec_payload == payload
@@ -93,7 +95,7 @@ def test_stream_frame_decoder() -> None:
     frame2 = encode_frame(BslCmd.START_DATA, b"P2")
 
     # Feed with noise prefix, split across chunks
-    stream = b"\x00\xFF\xAA" + frame1 + frame2
+    stream = b"\x00\xff\xaa" + frame1 + frame2
     chunk1 = stream[:10]
     chunk2 = stream[10:25]
     chunk3 = stream[25:]
