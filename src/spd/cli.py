@@ -49,6 +49,8 @@ class ContextObject:
         self.fdl2: Path | None = None
         self.fdl2_addr: int | None = None
         self.exec_addr: int | None = None
+        self.kick: bool = False
+        self.kick_to: int = 0
 
     def get_transport(self) -> BaseTransport:
         """Create and connect transport based on context settings."""
@@ -76,6 +78,10 @@ class ContextObject:
                 trans.device.stage = BslStage.FDL2
                 trans.device.use_crc16 = True
 
+        if auto_boot and self.kick:
+            engine = BootEngine(channel)
+            engine.kick(bootmode=self.kick_to)
+
         if auto_boot and self.fdl1:
             engine = BootEngine(channel)
             f1_addr = (
@@ -96,6 +102,8 @@ class ContextObject:
                     fdl2=self.fdl2,
                     fdl2_addr=f2_addr,
                     exec_addr=self.exec_addr,
+                    kick=self.kick,
+                    kick_mode=self.kick_to,
                     progress_cb=lambda stage, curr, tot: pb.update(curr, tot),
                 )
 
@@ -142,6 +150,12 @@ class ContextObject:
 )
 @click.option("--fdl2-addr", type=str, help="FDL2 load address (hex).")
 @click.option("--exec-addr", type=str, help="CVE-2022-38694 signature bypass address.")
+@click.option(
+    "--kick",
+    is_flag=True,
+    help="Kick device from diagnostic/calibration mode into download mode.",
+)
+@click.option("--kick-to", default=0, type=int, help="Target boot mode ID for kick.")
 @click.pass_context
 def cli(
     ctx: click.Context,
@@ -157,6 +171,8 @@ def cli(
     fdl2: Path | None,
     fdl2_addr: str | None,
     exec_addr: str | None,
+    kick: bool,
+    kick_to: int,
 ) -> None:
     """⚡ Unisoc / Spreadtrum Firmware Tool (spd-py)."""
     obj = ContextObject()
@@ -172,6 +188,8 @@ def cli(
     obj.fdl2 = fdl2
     obj.fdl2_addr = int(fdl2_addr, 0) if fdl2_addr else None
     obj.exec_addr = int(exec_addr, 0) if exec_addr else None
+    obj.kick = kick
+    obj.kick_to = kick_to
     ctx.obj = obj
     setup_logging(verbose)
 
@@ -189,6 +207,10 @@ def cli(
 )
 @click.option("--fdl2-addr", type=str, help="Hex address for FDL2.")
 @click.option("--exec-addr", type=str, help="CVE-2022-38694 bypass address.")
+@click.option(
+    "--kick", is_flag=True, help="Kick device from diag mode before booting."
+)
+@click.option("--kick-to", default=0, type=int, help="Target mode ID for kick.")
 @click.pass_obj
 def cmd_boot(
     obj: ContextObject,
@@ -197,6 +219,8 @@ def cmd_boot(
     fdl2: Path | None,
     fdl2_addr: str | None,
     exec_addr: str | None,
+    kick: bool,
+    kick_to: int,
 ) -> None:
     """Execute BSL boot sequence (FDL1 & FDL2 upload)."""
     trans = obj.get_transport()
@@ -222,6 +246,8 @@ def cmd_boot(
             fdl2=fdl2,
             fdl2_addr=f2_addr,
             exec_addr=ex_addr,
+            kick=kick or obj.kick,
+            kick_mode=kick_to or obj.kick_to,
             progress_cb=lambda stage, curr, tot: pb.update(curr, tot),
         )
 
@@ -229,6 +255,30 @@ def cmd_boot(
         f"[bold green]Boot sequence successful![/bold green] Device at {channel.stage.name}"
     )
     trans.disconnect()
+
+
+@cli.command("kick")
+@click.option(
+    "--mode", "-m", default=0, type=int, help="Target boot mode ID (default: 0)."
+)
+@click.option("--at", is_flag=True, help="Send AT modem command sequence.")
+@click.pass_obj
+def cmd_kick(obj: ContextObject, mode: int, at: bool) -> None:
+    """Kick phone from diagnostic / calibration mode into download mode."""
+    trans, channel = obj.get_channel(auto_boot=False)
+    try:
+        engine = BootEngine(channel)
+        success = engine.kick(bootmode=mode, at=at, timeout=obj.timeout)
+        if success:
+            console.print(
+                "[bold green]✔ Device successfully kicked into download mode[/bold green]"
+            )
+        else:
+            console.print(
+                "[bold yellow]⚠ Kick command sent; verify phone state[/bold yellow]"
+            )
+    finally:
+        trans.disconnect()
 
 
 @cli.command("info")

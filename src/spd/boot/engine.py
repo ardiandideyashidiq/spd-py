@@ -29,11 +29,104 @@ class BootError(Exception):
     """Raised when the BSL handshake or boot stages fail."""
 
 
+DIAG_AUTODLOADER_CMD = (
+    bytes([0x7E, 0x00, 0x00, 0x00, 0x00, 0x20, 0x00, 0x68, 0x00])
+    + b'AT+SPREF="AUTODLOADER"\r\n'
+    + bytes([0x7E])
+)
+
+
+def build_diag_payload(bootmode: int = 0, at: bool = False) -> bytes:
+    """Build diagnostic mode switch packet (matching C ChangeMode)."""
+    payload = bytearray([0x7E, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0xFE, 0x00, 0x7E])
+    if not bootmode:
+        payload[8] = 0x82
+    elif at:
+        payload[8] = 0x81
+    else:
+        payload[8] = (bootmode + 0x80) & 0xFF
+    return bytes(payload)
+
+
 class BootEngine:
     """Manages the multi-stage BSL boot sequence (BROM -> FDL1 -> FDL2)."""
 
     def __init__(self, channel: SpdChannel) -> None:
         self.channel = channel
+
+    def kick(
+        self,
+        bootmode: int = 0,
+        at: bool = False,
+        timeout: float = 10.0,
+    ) -> bool:
+        """Switch device from diagnostic/calibration mode into download (BROM) mode.
+
+        Matches C ChangeMode() implementation.
+        """
+        logger.info(
+            f"Kicking device to download mode (bootmode: {bootmode}, at: {at})..."
+        )
+        start_time = time.time()
+
+        # 1. If bootmode == 0, send 10-byte 0x7E hello burst first
+        if not bootmode:
+            hello = bytes([0x7E] * 10)
+            self.channel.transport.write(hello)
+            resp = self.channel.transport.read(64, timeout=0.5)
+            if resp and len(resp) >= 3 and resp[2] in (
+                BslRep.VER,
+                BslRep.VERIFY_ERROR,
+                BslRep.UNKNOW_CMD,
+                BslRep.ACK,
+            ):
+                logger.info("Device already responded in download/BROM mode")
+                return True
+
+        # 2. Send diag switch packet
+        payload = build_diag_payload(bootmode=bootmode, at=at)
+        self.channel.transport.write(payload)
+        resp = self.channel.transport.read(64, timeout=1.0)
+
+        if resp and len(resp) >= 3 and resp[2] in (
+            BslRep.VER,
+            BslRep.VERIFY_ERROR,
+            BslRep.UNKNOW_CMD,
+            BslRep.ACK,
+        ):
+            logger.info("Device successfully switched to download mode")
+            return True
+
+        # 3. If phone didn't acknowledge directly, fallback to AT+SPREF="AUTODLOADER"
+        time.sleep(0.5)
+        self.channel.transport.write(DIAG_AUTODLOADER_CMD)
+        self.channel.transport.read(64, timeout=1.0)
+
+        # 4. Wait for device reconnection / readiness
+        while time.time() - start_time < timeout:
+            try:
+                self.channel.reset_decoder()
+                self.channel.send_msg(BslCmd.CHECK_BAUD, bytes([0x7E] * 8))
+                rep, _ = self.channel.exec_cmd(
+                    BslCmd.CONNECT, timeout=0.5, check_ack=False
+                )
+                if rep in (BslRep.ACK, BslRep.VER):
+                    logger.info("Device successfully reconnected in download mode!")
+                    return True
+            except (
+                BslError,
+                BslTimeoutError,
+                FramingError,
+                TransportError,
+                OSError,
+            ) as e:
+                logger.trace(f"Reconnection poll failed: {e}")
+            time.sleep(0.2)
+
+        logger.warning(
+            "Kick timeout reached; phone may need manual reboot into download mode."
+        )
+        return False
 
     def handshake(self, max_retries: int = 15, retry_interval: float = 0.2) -> BslStage:
         """Establish initial BSL handshake with target device.
@@ -130,9 +223,14 @@ class BootEngine:
         fdl2: Path | bytes | None = None,
         fdl2_addr: int | None = None,
         exec_addr: int | None = None,
+        kick: bool = False,
+        kick_mode: int = 0,
         progress_cb: Callable[[str, int, int], None] | None = None,
     ) -> None:
         """Execute full multi-stage boot sequence from BROM to FDL2."""
+        if kick:
+            self.kick(bootmode=kick_mode)
+
         # Initial handshake
         self.handshake()
 

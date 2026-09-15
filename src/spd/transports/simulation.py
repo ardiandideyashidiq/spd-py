@@ -97,6 +97,23 @@ class MockUnisocDevice:
                 )
             ]
 
+        # Handle diag mode kick packets (0xFE command or AUTODLOADER AT command)
+        is_diag_fe = (
+            len(raw_frame) == 10
+            and raw_frame[0] == 0x7E
+            and raw_frame[7] == 0xFE
+            and raw_frame[9] == 0x7E
+        )
+        if b"AUTODLOADER" in raw_frame or is_diag_fe:
+            return [
+                encode_frame(
+                    BslRep.VER,
+                    b"SPRD3",
+                    use_crc16=self.use_crc16,
+                    use_transcode=self.use_transcode,
+                )
+            ]
+
         cmd_type, payload = decode_frame(
             raw_frame,
             use_crc16=self.use_crc16,
