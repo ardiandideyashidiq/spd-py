@@ -74,11 +74,16 @@ class BootEngine:
             hello = bytes([0x7E] * 10)
             self.channel.transport.write(hello)
             resp = self.channel.transport.read(64, timeout=0.5)
-            if resp and len(resp) >= 3 and resp[2] in (
-                BslRep.VER,
-                BslRep.VERIFY_ERROR,
-                BslRep.UNKNOW_CMD,
-                BslRep.ACK,
+            if (
+                resp
+                and len(resp) >= 3
+                and resp[2]
+                in (
+                    BslRep.VER,
+                    BslRep.VERIFY_ERROR,
+                    BslRep.UNKNOW_CMD,
+                    BslRep.ACK,
+                )
             ):
                 logger.info("Device already responded in download/BROM mode")
                 return True
@@ -88,11 +93,16 @@ class BootEngine:
         self.channel.transport.write(payload)
         resp = self.channel.transport.read(64, timeout=1.0)
 
-        if resp and len(resp) >= 3 and resp[2] in (
-            BslRep.VER,
-            BslRep.VERIFY_ERROR,
-            BslRep.UNKNOW_CMD,
-            BslRep.ACK,
+        if (
+            resp
+            and len(resp) >= 3
+            and resp[2]
+            in (
+                BslRep.VER,
+                BslRep.VERIFY_ERROR,
+                BslRep.UNKNOW_CMD,
+                BslRep.ACK,
+            )
         ):
             logger.info("Device successfully switched to download mode")
             return True

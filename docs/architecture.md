@@ -81,8 +81,11 @@ All physical communication mechanisms inherit from `BaseTransport`:
 - **`Partition`**: Dataclass model representing partition boundaries, size, slot detection (`_a`, `_b`), and user-data classification.
 - **`PartitionTable`**:
   - Binary BSL partition table parser matching Unisoc `0x4C` entry structure with divisor detection.
-  - XML partition list parser and generator.
+  - XML partition list parser and binary generator (`to_bsl_binary`, `from_xml`).
   - JSON manifest export and import (`partitions.json`) for automated backups and restoring.
+- **`spd.partitions.nand`**:
+  - NAND flash geometry calculations (`parse_nand_id`).
+  - UBI image volume sizing (`parse_ubi_size`) matching Spreadtrum formula for block overhead reservation.
 
 ---
 
@@ -91,10 +94,31 @@ All physical communication mechanisms inherit from `BaseTransport`:
 - **`BootEngine`**: Multi-stage bootstrapping:
   - BROM synchronization burst.
   - CVE-2022-38694 signature verification bypass via `exec_addr`.
+  - Diagnostic mode kick (`kick()` and `build_diag_payload()`) using `AUTODLOADER` commands to switch device from AT/diag ports to download mode.
   - FDL1 / FDL2 staging and execution.
 - **`flasher.operations`**:
   - `dump_partition` & `dump_all` (with lite backup excluding userdata/cache).
   - `flash_partition` & `flash_all` batch directory flashing.
   - `erase_partition` & `erase_all`.
   - `write_offset` (`wof`) and `write_value` (`wov`).
-  - Device controls (`reboot`, `slot`, `security`, `info`).
+  - `repartition`: Synthesizes BSL binary table from XML and issues `BSL_CMD_REPARTITION`.
+  - Direct physical I/O: `read_mem` (`BSL_CMD_READ_MIDST`), `read_flash` (`BSL_CMD_READ_FLASH`), `write_flash`, and `write_physical_word`.
+  - Device controls (`reboot`, `slot`, `security`, `info`, `pactime`, `firstmode`).
+
+---
+
+## 5. Android Subsystems & Firmware Integration
+
+- **Android Bootloader Control (BCB)**:
+  - `build_bootloader_control`: Formats 32-byte `bootloader_control` struct with CRC32 checksum at offset `0x800` of partition `misc`.
+  - Supports standard Android A/B slot switching (`a` or `b`).
+  - Fastboot and recovery triggers written into `misc` control command blocks.
+- **Android Verified Boot (AVB)**:
+  - `set_dm_verity`: Locates `vbmeta`, `vbmeta_a`, `vbmeta_b`, and `vbmeta_bak` partitions and patches verification flag byte at offset `0x7B`.
+- **NV Item Checksum Generation**:
+  - `prepare_nv_image`: Recalculates CRC16 over NV items and embeds 32-bit additive checksum in fixed headers, ensuring modified NV / calibration partitions are accepted by bootloaders without radio calibration errors.
+- **PAC Build Metadata**:
+  - `read_pactime`: Extracts 64-bit Windows FILETIME from `miscdata:0x81400` and decodes it to ISO 8601 UTC datetime.
+- **First Boot Mode**:
+  - `set_first_mode`: Encodes `mode + 0x53464D00` ("SFM\0") and writes to `miscdata:0x2420` via `BSL_CMD_SET_FIRST_MODE`.
+

@@ -20,11 +20,18 @@ from ..flasher.operations import (
     erase_partition,
     flash_partition,
     read_chip_info,
+    read_flash,
+    read_mem,
+    read_pactime,
     read_partition_table,
     reboot_device,
+    repartition,
     set_active_slot,
     set_dm_verity,
+    set_first_mode,
+    write_flash,
     write_offset,
+    write_physical_word,
     write_value,
 )
 from .console import console
@@ -56,6 +63,17 @@ class SpdInteractiveShell:
         "patch",
         "slot",
         "verity",
+        "pactime",
+        "firstmode",
+        "repartition",
+        "read-mem",
+        "read_mem",
+        "read-flash",
+        "read_flash",
+        "write-flash",
+        "write_flash",
+        "write-word",
+        "write_word",
         "reboot",
         "exit",
         "quit",
@@ -177,6 +195,61 @@ class SpdInteractiveShell:
             )
             return True
 
+        if cmd in ("pactime",):
+            raw_pt, unix_pt = read_pactime(self.channel)
+            if unix_pt > 0:
+                import datetime
+
+                dt = datetime.datetime.fromtimestamp(unix_pt, tz=datetime.UTC)
+                console.print(
+                    f"[bold green]PAC Creation Timestamp:[/bold green] {dt.strftime('%Y-%m-%d %H:%M:%S UTC')} (raw: 0x{raw_pt:X})"
+                )
+            else:
+                console.print(
+                    "[yellow]No PAC timestamp found in partition 'miscdata'[/yellow]"
+                )
+            return True
+
+        if cmd in ("firstmode", "first-mode"):
+            if len(args) < 2:
+                console.print("[yellow]Usage: firstmode <mode_int>[/yellow]")
+            else:
+                mode = int(args[1], 0)
+                set_first_mode(self.channel, mode)
+                console.print(f"[green]First mode set to {mode} (0x{mode:02X})[/green]")
+            return True
+
+        if cmd in ("repartition",):
+            if len(args) < 2:
+                console.print("[yellow]Usage: repartition <partition.xml>[/yellow]")
+            else:
+                xml_path = Path(args[1])
+                if not xml_path.exists():
+                    console.print(f"[bold red]File not found:[/bold red] {xml_path}")
+                else:
+                    repartition(self.channel, xml_path)
+                    console.print(
+                        f"[bold green]Successfully repartitioned using {xml_path}[/bold green]"
+                    )
+                    self._update_partition_names()
+            return True
+
+        if cmd in ("read-mem", "read_mem"):
+            self._cmd_read_mem(args[1:])
+            return True
+
+        if cmd in ("read-flash", "read_flash"):
+            self._cmd_read_flash(args[1:])
+            return True
+
+        if cmd in ("write-flash", "write_flash"):
+            self._cmd_write_flash(args[1:])
+            return True
+
+        if cmd in ("write-word", "write_word"):
+            self._cmd_write_word(args[1:])
+            return True
+
         if cmd in ("reboot", "reset", "reboot-recovery", "reboot-fastboot", "poweroff"):
             mode = "normal"
             if cmd == "reboot-recovery" or (len(args) > 1 and args[1] == "recovery"):
@@ -296,6 +369,98 @@ class SpdInteractiveShell:
                 f"[green]Written 0x{val:08X} to {part_name}+0x{offset:X}[/green]"
             )
 
+    def _cmd_read_mem(self, args: list[str]) -> None:
+        """Handle read-mem command."""
+        if len(args) < 2:
+            console.print(
+                "[yellow]Usage: read-mem <addr> <size> [output_file][/yellow]"
+            )
+            return
+        addr = int(args[0], 0)
+        size = int(args[1], 0)
+        out_file = args[2] if len(args) > 2 else f"mem_0x{addr:X}.bin"
+        with TransferProgressBar(f"Reading mem at 0x{addr:X}") as pb:
+            read_mem(
+                self.channel,
+                start_addr=addr,
+                size=size,
+                output_path=out_file,
+                progress_callback=pb.callback(),
+            )
+        console.print(
+            f"[bold green]Read {size} bytes from 0x{addr:X}[/bold green] -> {out_file}"
+        )
+
+    def _cmd_read_flash(self, args: list[str]) -> None:
+        """Handle read-flash command."""
+        if len(args) < 2:
+            console.print(
+                "[yellow]Usage: read-flash <addr> [offset] <size> [output_file][/yellow]"
+            )
+            return
+        if len(args) == 2:
+            addr = int(args[0], 0)
+            offset = 0
+            size = int(args[1], 0)
+            out_file = f"flash_0x{addr:X}.bin"
+        elif len(args) == 3:
+            addr = int(args[0], 0)
+            try:
+                offset = int(args[1], 0)
+                size = int(args[2], 0)
+                out_file = f"flash_0x{addr:X}.bin"
+            except ValueError:
+                offset = 0
+                size = int(args[1], 0)
+                out_file = args[2]
+        else:
+            addr = int(args[0], 0)
+            offset = int(args[1], 0)
+            size = int(args[2], 0)
+            out_file = args[3]
+
+        with TransferProgressBar(f"Reading flash at 0x{addr:X}") as pb:
+            read_flash(
+                self.channel,
+                addr=addr,
+                offset=offset,
+                size=size,
+                output_path=out_file,
+                progress_callback=pb.callback(),
+            )
+        console.print(
+            f"[bold green]Read {size} bytes from flash 0x{addr:X}+0x{offset:X}[/bold green] -> {out_file}"
+        )
+
+    def _cmd_write_flash(self, args: list[str]) -> None:
+        """Handle write-flash command."""
+        if len(args) < 2:
+            console.print("[yellow]Usage: write-flash <addr> <input_file>[/yellow]")
+            return
+        addr = int(args[0], 0)
+        in_file = Path(args[1])
+        if not in_file.exists():
+            console.print(f"[bold red]File not found:[/bold red] {in_file}")
+            return
+        with TransferProgressBar(f"Writing flash at 0x{addr:X}") as pb:
+            write_flash(
+                self.channel,
+                addr=addr,
+                input_source=in_file,
+                progress_callback=pb.callback(),
+            )
+        console.print(f"[bold green]Wrote {in_file} to flash 0x{addr:X}[/bold green]")
+
+    def _cmd_write_word(self, args: list[str]) -> None:
+        """Handle write-word command."""
+        if len(args) < 2:
+            console.print("[yellow]Usage: write-word <addr> <value>[/yellow]")
+            return
+        addr = int(args[0], 0)
+        val = int(args[1], 0)
+        write_physical_word(self.channel, addr=addr, value=val)
+        console.print(f"[bold green]Wrote 0x{val:08X} to 0x{addr:08X}[/bold green]")
+
     def _print_help(self) -> None:
         """Print help summary."""
         console.print("\n[bold cyan]Available Commands:[/bold cyan]")
@@ -319,6 +484,27 @@ class SpdInteractiveShell:
         )
         console.print(
             "  [bold white]verity[/bold white] <0|1>                   Toggle dm-verity"
+        )
+        console.print(
+            "  [bold white]pactime[/bold white]                      Read PAC creation timestamp from miscdata"
+        )
+        console.print(
+            "  [bold white]firstmode[/bold white] <mode>               Set first boot mode (0x2420)"
+        )
+        console.print(
+            "  [bold white]repartition[/bold white] <xml>              Repartition flash storage using XML table"
+        )
+        console.print(
+            "  [bold white]read-mem[/bold white] <addr> <size> [out]   Read physical memory directly"
+        )
+        console.print(
+            "  [bold white]read-flash[/bold white] <addr> <size> [out] Direct physical flash read"
+        )
+        console.print(
+            "  [bold white]write-flash[/bold white] <addr> <file>     Direct physical flash write"
+        )
+        console.print(
+            "  [bold white]write-word[/bold white] <addr> <val>       Write 32-bit physical word"
         )
         console.print(
             "  [bold white]info[/bold white]                          Display chip UID and hardware info"

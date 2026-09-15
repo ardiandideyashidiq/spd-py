@@ -10,7 +10,16 @@ A modern, modular, cross-platform Python implementation of the Unisoc BSL (Bootl
 
 ## ✨ Features
 
-- **Intuitive Subcommand CLI**: Clean verbs (`dump`, `flash`, `erase`, `partitions`, `reboot`, `slot`, `security`) replace cryptic single-letter commands.
+- **Intuitive Subcommand CLI**: Clean verbs (`dump`, `flash`, `erase`, `partitions`, `reboot`, `slot`, `security`, `kick`, `pactime`, `firstmode`, `raw`) replace cryptic single-letter commands.
+- **100% C Codebase Feature Parity**:
+  - Diagnostic mode kick & autodloader commands (`spd kick`, `--kick`).
+  - Android Bootloader Control (BCB) A/B slot switching (`spd slot`).
+  - Android Verified Boot (AVB) dm-verity disabler across vbmeta partitions (`spd security`).
+  - Direct physical memory (RAM) and raw flash memory read/write operations (`spd raw`).
+  - Storage repartitioning via XML partition tables (`spd partitions --repartition`).
+  - Automatic NV item checksum generation (CRC16 + additive word check) during flash.
+  - NAND flash geometry and UBI volume size calculations.
+  - PAC firmware creation timestamp decoding (`spd pactime`).
 - **Rich Terminal Experience**: Live transfer speed progress bars (ETA, MB/s, percent) and styled tables for partition listings and device properties.
 - **Interactive REPL Shell**: Powered by `prompt_toolkit` and `rich` with tab completion, history, and legacy aliases (`r`, `w`, `e`, `p`, etc.).
 - **Zero-Hardware Simulation**: Built-in mock Unisoc device (`--sim` flag) for instant testing of all commands without a physical phone.

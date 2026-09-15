@@ -85,6 +85,34 @@ def test_shell_command_dispatch(tmp_path: Path, monkeypatch) -> None:
     assert shell._handle_command("slot a") is True
     assert shell._handle_command("verity 0") is True
 
+    # Test pactime and firstmode
+    assert shell._handle_command("pactime") is True
+    assert shell._handle_command("firstmode 2") is True
+
+    # Test repartition
+    xml_file = tmp_path / "part.xml"
+    xml_file.write_text(
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        "<PartitionSel>\n"
+        '    <Part id="boot" size="64"/>\n'
+        "</PartitionSel>"
+    )
+    assert shell._handle_command(f"repartition {xml_file}") is True
+
+    # Test raw commands: read-mem, read-flash, write-flash, write-word
+    mem_out = tmp_path / "mem.bin"
+    assert shell._handle_command(f"read-mem 0x1000 64 {mem_out}") is True
+    assert mem_out.exists()
+
+    flash_out = tmp_path / "flash.bin"
+    assert shell._handle_command(f"read-flash 0x2000 64 {flash_out}") is True
+    assert flash_out.exists()
+
+    flash_in = tmp_path / "flash.in"
+    flash_in.write_bytes(b"DATA" * 16)
+    assert shell._handle_command(f"write-flash 0x2000 {flash_in}") is True
+    assert shell._handle_command("write-word 0x3000 0x12345678") is True
+
     # Test exit & quit
     assert shell._handle_command("exit") is False
     assert shell._handle_command("quit") is False

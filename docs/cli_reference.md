@@ -20,6 +20,8 @@ The following options can be provided to any `spd` command:
 | `--fdl2` | | Optional FDL2 image to auto-boot device | None |
 | `--fdl2-addr` | | FDL2 load address in hex (e.g. `0x9F000000`) | From file |
 | `--exec-addr` | | CVE-2022-38694 signature bypass address | None |
+| `--kick` | | Kick device from diagnostic mode before booting | `False` |
+| `--kick-to` | | Target mode ID for kick | `0` |
 | `--help` | `-h` | Show help and usage summary | |
 
 ---
@@ -55,6 +57,9 @@ Inspect on-flash partition table, or export it to XML or JSON manifest.
 ```bash
 # Display formatted Rich partition table
 spd partitions
+
+# Repartition device storage using an XML partition table
+spd partitions --repartition partition.xml
 
 # Export to XML
 spd partitions --xml partitions.xml
@@ -178,9 +183,61 @@ spd --sim shell
 
 ---
 
-### 12. `spd simulate`
+### 12. `spd kick`
+Send diagnostic mode kick / AUTODLOADER frame to switch device from diagnostic/AT port mode to bootloader BSL mode.
+
+```bash
+# Kick diagnostic device to mode 0 (BSL download)
+spd kick
+
+# Kick with custom mode ID (e.g., mode 2)
+spd kick --mode 2
+```
+
+---
+
+### 13. `spd pactime`
+Read and decode the PAC firmware build timestamp stored as a 64-bit Windows FILETIME in the `miscdata` partition at offset `0x81400`.
+
+```bash
+spd pactime
+```
+
+---
+
+### 14. `spd firstmode`
+Set device first boot mode flags at offset `0x2420` of partition `miscdata`.
+
+```bash
+# Set first boot mode to 1
+spd firstmode 1
+```
+
+---
+
+### 15. `spd raw`
+Direct physical memory and flash memory I/O operations bypassing the partition table (equivalent to C `dump_mem`, `dump_flash`, `write_flash`, `write_word`).
+
+```bash
+# Read physical memory (RAM/ROM) from 0x80000000 (size 0x1000) to file
+spd raw read-mem 0x80000000 0x1000 mem_dump.bin
+
+# Read raw flash memory from base address 0x0 offset 0x0 (size 0x200000)
+spd raw read-flash 0x0 0x0 0x200000 flash_dump.bin
+
+# Write binary file directly to physical memory / flash at address 0x80000000
+spd raw write-flash 0x80000000 payload.bin
+
+# Write 32-bit physical word to memory address
+spd raw write-word 0x80000000 0x12345678
+```
+
+---
+
+### 16. `spd simulate`
 Run an automated simulation session demonstrating hardware connection, partition query, and simulated flashing.
 
 ```bash
 spd simulate
 ```
+

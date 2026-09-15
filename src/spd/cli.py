@@ -216,9 +216,7 @@ def cli(
 )
 @click.option("--fdl2-addr", type=str, help="Hex address for FDL2.")
 @click.option("--exec-addr", type=str, help="CVE-2022-38694 bypass address.")
-@click.option(
-    "--kick", is_flag=True, help="Kick device from diag mode before booting."
-)
+@click.option("--kick", is_flag=True, help="Kick device from diag mode before booting.")
 @click.option("--kick-to", default=0, type=int, help="Target mode ID for kick.")
 @click.pass_obj
 def cmd_boot(

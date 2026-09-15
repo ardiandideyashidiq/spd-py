@@ -538,9 +538,7 @@ def set_first_mode(channel: SpdChannel, mode_id: int) -> None:
     except (BslError, BslTimeoutError, FlasherError, OSError) as e:
         logger.debug(f"Writing firstmode magic to 'miscdata': {e}")
 
-    channel.exec_cmd(
-        BslCmd.SET_FIRST_MODE, struct.pack(">I", mode_id), check_ack=False
-    )
+    channel.exec_cmd(BslCmd.SET_FIRST_MODE, struct.pack(">I", mode_id), check_ack=False)
 
 
 def read_pactime(channel: SpdChannel) -> tuple[int, int]:
@@ -555,9 +553,7 @@ def read_pactime(channel: SpdChannel) -> tuple[int, int]:
 
     try:
         midst_payload = struct.pack("<II", 8, 0x81400)
-        rep, chunk = channel.exec_cmd(
-            BslCmd.READ_MIDST, midst_payload, check_ack=False
-        )
+        rep, chunk = channel.exec_cmd(BslCmd.READ_MIDST, midst_payload, check_ack=False)
         if rep not in (BslRep.ACK, BslRep.READ_FLASH) or len(chunk) < 8:
             raise FlasherError(
                 f"Failed to read pactime (rep: 0x{rep:02X}, chunk len: {len(chunk)})"

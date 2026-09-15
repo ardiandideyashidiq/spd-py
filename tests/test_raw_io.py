@@ -24,7 +24,9 @@ def test_read_mem(tmp_path: Path) -> None:
     channel = SpdChannel(trans)
 
     out_file = tmp_path / "mem_dump.bin"
-    bytes_read = read_mem(channel, start_addr=0x80000000, size=2048, output_path=out_file)
+    bytes_read = read_mem(
+        channel, start_addr=0x80000000, size=2048, output_path=out_file
+    )
     assert bytes_read == 2048
     assert out_file.exists()
     assert len(out_file.read_bytes()) == 2048
@@ -75,19 +77,27 @@ def test_cli_raw_commands(tmp_path: Path) -> None:
     runner = CliRunner()
 
     mem_out = tmp_path / "cli_mem.bin"
-    res1 = runner.invoke(cli, ["--sim", "raw", "read-mem", "0x80000000", "512", str(mem_out)])
+    res1 = runner.invoke(
+        cli, ["--sim", "raw", "read-mem", "0x80000000", "512", str(mem_out)]
+    )
     assert res1.exit_code == 0
     assert mem_out.exists()
 
     flash_out = tmp_path / "cli_flash.bin"
-    res2 = runner.invoke(cli, ["--sim", "raw", "read-flash", "0x0", "0x0", "1024", str(flash_out)])
+    res2 = runner.invoke(
+        cli, ["--sim", "raw", "read-flash", "0x0", "0x0", "1024", str(flash_out)]
+    )
     assert res2.exit_code == 0
     assert flash_out.exists()
 
     dummy_bin = tmp_path / "payload.bin"
     dummy_bin.write_bytes(b"\x90" * 128)
-    res3 = runner.invoke(cli, ["--sim", "raw", "write-flash", "0x80000000", str(dummy_bin)])
+    res3 = runner.invoke(
+        cli, ["--sim", "raw", "write-flash", "0x80000000", str(dummy_bin)]
+    )
     assert res3.exit_code == 0
 
-    res4 = runner.invoke(cli, ["--sim", "raw", "write-word", "0x80000000", "0xCAFEBABE"])
+    res4 = runner.invoke(
+        cli, ["--sim", "raw", "write-word", "0x80000000", "0xCAFEBABE"]
+    )
     assert res4.exit_code == 0
